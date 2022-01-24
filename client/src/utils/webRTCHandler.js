@@ -1,7 +1,8 @@
-import { setShowOverlay } from "../store/actions";
+import { setMessages, setShowOverlay } from "../store/actions";
 import * as wss from "./wss";
 import store from "../store/store";
 import Peer from "simple-peer";
+import { fetchTURNCredentials, getTURNIceServers } from "./turn";
 
 const defaultConstraints = {
     audio :true,
@@ -13,11 +14,13 @@ const defaultConstraints = {
 
 let localStream;
 
-export const getLocalPreviewAndInitRoomConnection = (
+export const getLocalPreviewAndInitRoomConnection = async (
     isRoomHost,
     identity,
     roomId = null
  ) => {
+        await fetchTURNCredentials();
+
         navigator.mediaDevices.getUserMedia(defaultConstraints).then(stream => {
 
             console.log("KK");
@@ -38,14 +41,36 @@ export const getLocalPreviewAndInitRoomConnection = (
  let streams = [];
 
  const getConfiguration = () => {
-     return {
+
+    const turnIceServers = getTURNIceServers();
+
+    if(turnIceServers){
+        console.log("TURN server credentials fetched");
+        console.log(turnIceServers);
+        return {
+            iceServers : [
+                {
+                     urls : "stun:stun.l.google.com:19302"
+                },
+                ...turnIceServers
+            ]
+        };
+    }
+    else {
+        console.warn("Using only STUN server");
+        return {
          iceServers : [
              {
                  urls : "stun:stun.l.google.com:19302"
              }
          ]
-     };
+        };
+    }
+
+     
  };
+
+ const messengerChannel = "messenger";
 
  export const prepareNewPeerConnection = (connUserSocketId , isInitiator) => {
     const configuration = getConfiguration();
@@ -53,7 +78,8 @@ export const getLocalPreviewAndInitRoomConnection = (
     peers[connUserSocketId] = new Peer({
         initiator : isInitiator,
         config : configuration,
-        stream : localStream
+        stream : localStream,
+        channelName : messengerChannel
     });
 
     peers[connUserSocketId].on("signal" , (data) => {
@@ -72,6 +98,11 @@ export const getLocalPreviewAndInitRoomConnection = (
 
         addStream(stream , connUserSocketId);
         streams = [...streams , stream];
+    });
+
+    peers[connUserSocketId].on("data" , (data) => {
+        const messageData = JSON.parse(data);
+        appendNewMessage(messageData);
     });
  };
 
@@ -142,14 +173,19 @@ export const removePeerConnection = (data) => {
      videoElement.addEventListener("click" , () => {
          if(videoElement.classList.contains("full_screen"))
          {
-             videoElement.classList.remove("full_screen");
+            videoContainer.style.position = "relative" ;
+            videoElement.classList.remove("full_screen");
          }
          else {
-             videoElement.classList.add("full_screen");
+            videoContainer.style.position = "static" 
+            videoElement.classList.add("full_screen");
          }
      });
 
      videoContainer.appendChild(videoElement);
+
+     videoContainer.style.position = "static";
+
      videosContainer.appendChild(videoContainer);
  };
 
@@ -187,3 +223,33 @@ export const removePeerConnection = (data) => {
         }
     }
  };
+
+ /////////////////////////////////Messages/////////////////////////////////
+
+ const appendNewMessage = (messageData) => {
+     const messages = store.getState().messages;
+     store.dispatch(setMessages([...messages,messageData]));
+ };
+
+ export const sendMessageUsingDataChannel = (messageContent) => {
+     //apend message locally
+     const identity = store.getState().identity;
+
+     const localMessageData = {
+         content : messageContent,
+         identity,
+         messageCreatedByMe : true
+     };
+
+     appendNewMessage(localMessageData);
+
+     const messageData = {
+         content : messageContent,
+         identity
+     };
+
+     const stringifiedMessageData = JSON.stringify(messageData);
+     for(let socketId in peers){
+         peers[socketId].send(stringifiedMessageData);
+     }
+ }
