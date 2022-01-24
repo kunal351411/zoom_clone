@@ -4,7 +4,6 @@ import RoomPage from "./RoomPage/RoomPage";
 import JoinRoomPage from "./JoinRoomPage/JoinRoomPage";
 import IntroductionPage from "./IntroductionPage/IntroductionPage";
 import { connectWithSocketIOServer } from './utils/wss';
-import './App.css';
 
 function App() {
 

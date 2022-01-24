@@ -1,6 +1,8 @@
-import React , {useState} from 'react';
+import React , {useState , useEffect} from 'react';
 import sendMessageButton from "../../resources/images/sendMessageButton.svg";
 import * as webRTCHandler from "../../utils/webRTCHandler";
+import { questionCheck } from './questionCheck';
+import { abuseCheck} from "./AbuseChecker";
 
 const NewMessage = () => {
     const [message , setMessage] = useState("");
@@ -22,8 +24,9 @@ const NewMessage = () => {
 
         if(message.length > 0)
         {
+            
             //execute a function to send message
-            webRTCHandler.sendMessageUsingDataChannel(message);
+            webRTCHandler.sendMessageUsingDataChannel(abuseCheck(questionCheck(message)));
             setMessage("");
         }
     };
